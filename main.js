@@ -11,7 +11,7 @@ async function handleRequest(request, env, ctx) {
     const basicAuth = env.BASIC_AUTH
 
     const db = new Database(env)
-    const {searchParams, pathname} = new URL(request.url)
+    const { searchParams, pathname } = new URL(request.url)
     const handler = new Handler(db, { allowNewDevice, allowQueryNums })
     const realPathname = pathname.replace((new RegExp('^' + rootPath.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'))), '/')
 
@@ -62,19 +62,19 @@ async function handleRequest(request, env, ctx) {
                             obj[key.toLowerCase()] = requestBody[key]
                             return obj
                         }, {})
-                    }else if (contentType && contentType.includes('application/x-www-form-urlencoded')){
+                    } else if (contentType && contentType.includes('application/x-www-form-urlencoded')) {
                         const formData = await request.formData()
-                        formData.forEach((value, key) => {requestBody[key.toLowerCase()] = value})
+                        formData.forEach((value, key) => { requestBody[key.toLowerCase()] = value })
 
                         try {
                             if (requestBody.title) {
                                 requestBody.title = decodeURIComponent(requestBody.title.replaceAll('\\+', '%20'))
                             }
-                            
+
                             if (requestBody.subtitle) {
                                 requestBody.subtitle = decodeURIComponent(requestBody.subtitle.replaceAll('\\+', '%20'))
                             }
-                            
+
                             if (requestBody.body) {
                                 requestBody.body = decodeURIComponent(requestBody.body.replaceAll('\\+', '%20'))
                             }
@@ -94,8 +94,8 @@ async function handleRequest(request, env, ctx) {
                                 }
                             })
                         }
-                    }else{
-                        searchParams.forEach((value, key) => {requestBody[key.toLowerCase()] = value})
+                    } else {
+                        searchParams.forEach((value, key) => { requestBody[key.toLowerCase()] = value })
 
                         if (pathParts.length === 3) {
                             requestBody.body = pathParts[2]
@@ -121,19 +121,19 @@ async function handleRequest(request, env, ctx) {
 
                         try {
                             if (requestBody.title) {
-                                requestBody.title = decodeURIComponent(requestBody.title.replaceAll('\\+','%20'))
+                                requestBody.title = decodeURIComponent(requestBody.title.replaceAll('\\+', '%20'))
                             }
-                            
+
                             if (requestBody.subtitle) {
-                                requestBody.subtitle = decodeURIComponent(requestBody.subtitle.replaceAll('\\+','%20'))
+                                requestBody.subtitle = decodeURIComponent(requestBody.subtitle.replaceAll('\\+', '%20'))
                             }
-                            
+
                             if (requestBody.body) {
-                                requestBody.body = decodeURIComponent(requestBody.body.replaceAll('\\+','%20'))
+                                requestBody.body = decodeURIComponent(requestBody.body.replaceAll('\\+', '%20'))
                             }
 
                             if (requestBody.markdown) {
-                                requestBody.markdown = decodeURIComponent(requestBody.markdown.replaceAll('\\+','%20'))
+                                requestBody.markdown = decodeURIComponent(requestBody.markdown.replaceAll('\\+', '%20'))
                             }
                         } catch (error) {
                             return new Response(JSON.stringify({
@@ -186,7 +186,7 @@ async function handleRequest(request, env, ctx) {
                                 }
                             }
 
-                            const response = await handler.push({...requestBody, device_key})
+                            const response = await handler.push({ ...requestBody, device_key })
                             const responseBody = await response.json()
                             return {
                                 code: response.status,
@@ -254,7 +254,7 @@ class Handler {
         this.commit = '18d1037eab7a2310f595cfd31ea49b444f6133f2'
         this.allowNewDevice = options.allowNewDevice
         this.allowQueryNums = options.allowQueryNums
-        
+
         this.register = async (parameters) => {
             const deviceToken = parameters.get('devicetoken')
             let key = parameters.get('key')
@@ -285,7 +285,7 @@ class Handler {
                 })
             }
 
-            if (!(key && await db.deviceTokenByKey(key))){
+            if (!(key && await db.deviceTokenByKey(key))) {
                 if (this.allowNewDevice) {
                     key = await util.newShortUUID()
                 } else {
@@ -377,6 +377,22 @@ class Handler {
                 })
             }
 
+            // Check force register constraint
+            if (await db.isForceRegisterToUse()) {
+                if (!(await db.isDeviceRegisteredToUser(parameters.device_key))) {
+                    return new Response(JSON.stringify({
+                        'code': 403,
+                        'message': 'push rejected: device key is not registered to any user account',
+                        'timestamp': util.getTimestamp(),
+                    }), {
+                        status: 403,
+                        headers: {
+                            'content-type': 'application/json',
+                        }
+                    })
+                }
+            }
+
             if (!deviceToken) {
                 return new Response(JSON.stringify({
                     'code': 400,
@@ -435,7 +451,7 @@ class Handler {
             const id = parameters.id || undefined
             const _delete = parameters.delete || undefined
             const markdown = parameters.markdown || undefined
-            
+
             // https://developer.apple.com/documentation/usernotifications/generating-a-remote-notification
             const aps = {
                 'aps': (_delete) ? {
@@ -518,7 +534,7 @@ class Handler {
             } else {
                 let message
                 const responseText = await response.text()
-                
+
                 try {
                     message = JSON.parse(responseText).reason
                 } catch (err) {
@@ -620,12 +636,35 @@ class Database {
 
         db.exec('CREATE TABLE IF NOT EXISTS `devices` (`id` INTEGER PRIMARY KEY, `key` VARCHAR(255) NOT NULL, `token` VARCHAR(255) NOT NULL, UNIQUE (`key`))')
         db.exec('CREATE TABLE IF NOT EXISTS `authorization` (`id` INTEGER PRIMARY KEY, `token` VARCHAR(255) NOT NULL, `time` VARCHAR(255) NOT NULL)')
+        db.exec('CREATE TABLE IF NOT EXISTS `settings` (`key` TEXT PRIMARY KEY, `value` TEXT NOT NULL)')
+        db.exec('CREATE TABLE IF NOT EXISTS `user_devices` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `user_id` INTEGER NOT NULL, `device_key` TEXT NOT NULL UNIQUE)')
+
+        this.isForceRegisterToUse = async () => {
+            try {
+                const query = "SELECT `value` FROM `settings` WHERE `key` = 'force_register_to_use'"
+                const result = await db.prepare(query).run()
+                return result.results[0] && result.results[0].value === 'true'
+            } catch (e) {
+                return false
+            }
+        }
+
+        this.isDeviceRegisteredToUser = async (key) => {
+            const device_key = (key || '').replace(/[^a-zA-Z0-9]/g, '') || '_PLACE_HOLDER_'
+            try {
+                const query = "SELECT `device_key` FROM `user_devices` WHERE `device_key` = ?"
+                const result = await db.prepare(query).bind(device_key).run()
+                return result.results.length > 0
+            } catch (e) {
+                return false
+            }
+        }
 
         this.countAll = async () => {
             const query = 'SELECT COUNT(*) as rowCount FROM `devices`'
             const result = await db.prepare(query).run()
-            
-            return (result.results[0] || {'rowCount': -1}).rowCount
+
+            return (result.results[0] || { 'rowCount': -1 }).rowCount
         }
 
         this.deviceTokenByKey = async (key) => {
@@ -633,7 +672,7 @@ class Database {
             const query = 'SELECT `token` FROM `devices` WHERE `key` = ?'
             const result = await db.prepare(query).bind(device_key).run()
 
-            return (result.results[0] || {'token': undefined}).token
+            return (result.results[0] || { 'token': undefined }).token
         }
 
         this.saveDeviceTokenByKey = async (key, token) => {
@@ -662,7 +701,7 @@ class Database {
         this.authorizationToken = async () => {
             const query = 'SELECT `token`, `time` FROM `authorization` WHERE `id` = 1'
             const result = await db.prepare(query).run()
-            
+
             if (result.results.length > 0) {
                 const tokenTime = parseInt(result.results[0].time)
                 const timeDifference = util.getTimestamp() - tokenTime
