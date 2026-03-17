@@ -31,7 +31,7 @@ async function handleRequest(request, env, ctx) {
                     status: 401,
                     headers: {
                         'content-type': 'text/plain',
-                        'WWW-Authenticate': 'Basic',
+                        'WWW-Authenticate': 'Basic realm="Bark"',
                     }
                 })
             }
@@ -85,7 +85,7 @@ async function handleRequest(request, env, ctx) {
                         } catch (error) {
                             return new Response(JSON.stringify({
                                 'code': 500,
-                                'meaasge': `url path parse failed: ${error}`,
+                                'message': `url path parse failed: ${error}`,
                                 'timestamp': util.getTimestamp(),
                             }), {
                                 status: 500,
@@ -138,7 +138,7 @@ async function handleRequest(request, env, ctx) {
                         } catch (error) {
                             return new Response(JSON.stringify({
                                 'code': 500,
-                                'meaasge': `url path parse failed: ${error}`,
+                                'message': `url path parse failed: ${error}`,
                                 'timestamp': util.getTimestamp(),
                             }), {
                                 status: 500,
@@ -249,9 +249,9 @@ async function handleRequest(request, env, ctx) {
 class Handler {
     constructor(db, options) {
         this.version = 'v2.2.6'
-        this.build = '2025-12-03 10:51:22'
+        this.build = '2026-03-14 14:39:26'
         this.arch = 'js'
-        this.commit = '18d1037eab7a2310f595cfd31ea49b444f6133f2'
+        this.commit = 'ce6983b67fb779d793d361db1af5149a5105c656'
         this.allowNewDevice = options.allowNewDevice
         this.allowQueryNums = options.allowQueryNums
         
@@ -272,7 +272,7 @@ class Handler {
                 })
             }
 
-            if (deviceToken.length > 128) {
+            if (deviceToken.length > 160) {
                 return new Response(JSON.stringify({
                     'code': 400,
                     'message': 'device token is invalid',
@@ -381,21 +381,6 @@ class Handler {
                 return new Response(JSON.stringify({
                     'code': 400,
                     'message': 'device token invalid',
-                    'timestamp': util.getTimestamp(),
-                }), {
-                    status: 400,
-                    headers: {
-                        'content-type': 'application/json',
-                    }
-                })
-            }
-
-            if (deviceToken.length > 128) {
-                await db.deleteDeviceByKey(parameters.device_key)
-
-                return new Response(JSON.stringify({
-                    'code': 400,
-                    'message': 'invalid device token, has been removed',
                     'timestamp': util.getTimestamp(),
                 }), {
                     status: 400,
